@@ -8,14 +8,206 @@ service: quiztopia
 provider:
   name: aws
   runtime: nodejs20.x
-  # Uncomment to easily set up a custom domain. Read the docs for more details:
-  # https://www.serverless.com/framework/docs/providers/aws/guide/domains
-  # domain: api.example.com
+  region: eu-north-1
+  stage: ${opt:stage, 'dev'}
+  environment:  
+    USERS_TABLE: ${self:service}-users-${self:provider.stage}
+    QUIZZES_TABLE: ${self:service}-quizzes-${self:provider.stage}
+    QUESTIONS_TABLE: ${self:service}-questions-${self:provider.stage}
+    LEADERBOARD_TABLE: ${self:service}-leaderboard-${self:provider.stage}
+    JWT_SECRET: ${env:JWT_SECRET, 'your-super-secret-jwt-key-change-in-production'}
+  httpApi:
+    cors:
+      allowedOrigins:
+        - '*'
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+  
+  # IAM Policy for Lambda functions
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}/index/*"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.QUIZZES_TABLE}"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.QUIZZES_TABLE}/index/*"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.QUESTIONS_TABLE}"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.QUESTIONS_TABLE}/index/*"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LEADERBOARD_TABLE}"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.LEADERBOARD_TABLE}/index/*"
 
 functions:
-  hello:
-    handler: handler.hello
+  # Authentication endpoints
+  register:
+    handler: src/handler.register
     events:
       - httpApi:
-          path: /
+          path: /auth/register
+          method: post
+
+  login:
+    handler: src/handler.login
+    events:
+      - httpApi:
+          path: /auth/login
+          method: post
+
+  # Quiz endpoints
+  createQuiz:
+    handler: src/handler.createQuiz
+    events:
+      - httpApi:
+          path: /quiz
+          method: post
+
+  getAllQuizzes:
+    handler: src/handler.getAllQuizzes
+    events:
+      - httpApi:
+          path: /quiz
           method: get
+
+  getQuiz:
+    handler: src/handler.getQuiz
+    events:
+      - httpApi:
+          path: /quiz/{userId}/{quizId}
+          method: get
+
+  deleteQuiz:
+    handler: src/handler.deleteQuiz
+    events:
+      - httpApi:  
+          path: /quiz/{quizId}
+          method: delete
+
+  addQuestion:
+    handler: src/handler.addQuestion
+    events:
+      - httpApi:
+          path: /quiz/{quizId}/question
+          method: post
+
+  registerScore:
+    handler: src/handler.registerScore
+    events:
+      - httpApi:
+          path: /quiz/{quizId}/score
+          method: post
+
+  getLeaderboard:
+    handler: src/handler.getLeaderboard
+    events:
+      - httpApi:
+          path: /quiz/{quizId}/leaderboard
+          method: get
+
+resources:
+  Resources:
+    # Users table
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.USERS_TABLE}
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+
+    # Quizzes table
+    QuizzesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.QUIZZES_TABLE}
+        AttributeDefinitions:
+          - AttributeName: quizId
+            AttributeType: S
+          - AttributeName: createdBy
+            AttributeType: S
+        KeySchema:
+          - AttributeName: quizId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CreatedByIndex
+            KeySchema:
+              - AttributeName: createdBy
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+
+    # Questions table
+    QuestionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.QUESTIONS_TABLE}
+        AttributeDefinitions:
+          - AttributeName: questionId
+            AttributeType: S
+          - AttributeName: quizId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: questionId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: QuizIdIndex
+            KeySchema:
+              - AttributeName: quizId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
+
+    # Leaderboard table
+    LeaderboardTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.LEADERBOARD_TABLE}
+        AttributeDefinitions:
+          - AttributeName: leaderboardId
+            AttributeType: S
+          - AttributeName: quizId
+            AttributeType: S
+          - AttributeName: score
+            AttributeType: N
+        KeySchema:
+          - AttributeName: leaderboardId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: QuizIdScoreIndex
+            KeySchema:
+              - AttributeName: quizId
+                KeyType: HASH
+              - AttributeName: score
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST

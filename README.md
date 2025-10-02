@@ -1,69 +1,236 @@
-<!--
-title: 'AWS Simple HTTP Endpoint example in NodeJS'
-description: 'This template demonstrates how to make a simple HTTP API with Node.js running on AWS Lambda and API Gateway using the Serverless Framework.'
-layout: Doc
-framework: v4
-platform: AWS
-language: nodeJS
-authorLink: 'https://github.com/serverless'
-authorName: 'Serverless, Inc.'
-authorAvatar: 'https://avatars1.githubusercontent.com/u/13742415?s=200&v=4'
--->
+# Quiztopia - Serverless Quiz Application
 
-# Serverless Framework Node HTTP API on AWS
+A modern, type-safe serverless quiz application built with TypeScript, AWS Lambda, DynamoDB, and API Gateway using the Serverless Framework. Users can create accounts, build quizzes with geo-located questions, and compete on leaderboards.
 
-This template demonstrates how to make a simple HTTP API with Node.js running on AWS Lambda and API Gateway using the Serverless Framework.
+## Features
 
-This template does not include any kind of persistence (database). For more advanced examples, check out the [serverless/examples repository](https://github.com/serverless/examples/) which includes Typescript, Mongo, DynamoDB and other examples.
+- **User Authentication**: Registration and login with JWT tokens
+- **Quiz Management**: Create, view, and delete quizzes
+- **Question Management**: Add questions with geographic coordinates to quizzes
+- **Public Quiz Listing**: Browse all available quizzes with creator information
+- **Protected Quiz Access**: Authentication required to view quiz questions
+- **Leaderboard System**: Track and display top scores for each quiz
+- **Score Registration**: Submit scores and compete with other players
+- **Comprehensive IAM Policy**: Precisely defined permissions for DynamoDB access
 
-## Usage
+## Technology Stack
+
+- **TypeScript**: Type-safe development with compile-time error checking
+- **Serverless Framework**: Infrastructure as Code
+- **AWS Lambda**: Serverless compute
+- **API Gateway**: HTTP API endpoints
+- **DynamoDB**: NoSQL database with GSI indexes
+- **JWT**: Authentication tokens
+- **Middy**: Middleware engine for Lambda
+- **bcryptjs**: Password hashing
+- **ESLint**: Code linting and formatting
+
+### Users Table
+
+- **Primary Key**: `userId` (String)
+- **GSI**: `EmailIndex` on `email`
+- **Attributes**: userId, email, username, password, createdAt
+
+### Quizzes Table
+
+- **Primary Key**: `quizId` (String)
+- **GSI**: `CreatedByIndex` on `createdBy`
+- **Attributes**: quizId, quizName, description, createdBy, createdAt
+
+### Questions Table
+
+- **Primary Key**: `questionId` (String)
+- **GSI**: `QuizIdIndex` on `quizId`
+- **Attributes**: questionId, quizId, question, answer, longitude, latitude, createdAt
+
+### Leaderboard Table
+
+- **Primary Key**: `leaderboardId` (String, format: `quizId#userId`)
+- **GSI**: `QuizIdScoreIndex` on `quizId` and `score` (sorted descending)
+- **Attributes**: leaderboardId, quizId, userId, username, score, createdAt
+
+## API Endpoints
+
+### Authentication
+
+- `POST /auth/register` - Register new user
+- `POST /auth/login` - User login
+
+### Quiz Management
+
+- `GET /quiz` - Get all quizzes (public)
+- `GET /quiz/{quizId}` - Get specific quiz with questions (requires auth)
+- `POST /quiz` - Create new quiz (requires auth)
+- `DELETE /quiz/{quizId}` - Delete quiz (requires auth, owner only)
+
+### Question Management
+
+- `POST /quiz/{quizId}/question` - Add question to quiz (requires auth, owner only)
+
+### Leaderboard
+
+- `POST /quiz/{quizId}/score` - Register score (requires auth)
+- `GET /quiz/{quizId}/leaderboard` - Get leaderboard (public)
+
+## Setup and Deployment
+
+### Prerequisites
+
+- Node.js 20.x
+- AWS CLI configured
+- Serverless Framework CLI
+
+### Installation
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Set environment variables (optional):
+
+```bash
+export JWT_SECRET="your-super-secret-jwt-key"
+```
 
 ### Deployment
 
-In order to deploy the example, you need to run the following command:
+Deploy to AWS:
 
-```
+```bash
 serverless deploy
 ```
 
-After running deploy, you should see output similar to:
+Deploy to specific stage:
 
-```
-Deploying "serverless-http-api" to stage "dev" (us-east-1)
-
-✔ Service deployed to stack serverless-http-api-dev (91s)
-
-endpoint: GET - https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/
-functions:
-  hello: serverless-http-api-dev-hello (1.6 kB)
+```bash
+serverless deploy --stage prod
 ```
 
-_Note_: In current form, after deployment, your API is public and can be invoked by anyone. For production deployments, you might want to configure an authorizer. For details on how to do that, refer to [HTTP API (API Gateway V2) event docs](https://www.serverless.com/framework/docs/providers/aws/events/http-api).
+### Local Development
 
-### Invocation
+Start local development server:
 
-After successful deployment, you can call the created application via HTTP:
-
-```
-curl https://xxxxxxx.execute-api.us-east-1.amazonaws.com/
-```
-
-Which should result in response similar to:
-
-```json
-{ "message": "Go Serverless v4! Your function executed successfully!" }
-```
-
-### Local development
-
-The easiest way to develop and test your function is to use the `dev` command:
-
-```
+```bash
 serverless dev
 ```
 
-This will start a local emulator of AWS Lambda and tunnel your requests to and from AWS Lambda, allowing you to interact with your function as if it were running in the cloud.
+## API Usage Examples
 
-Now you can invoke the function as before, but this time the function will be executed locally. Now you can develop your function locally, invoke it, and see the results immediately without having to re-deploy.
+### Register User
 
-When you are done developing, don't forget to run `serverless deploy` to deploy the function to the cloud.
+```bash
+curl -X POST https://your-api-url/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123",
+    "username": "testuser"
+  }'
+```
+
+### Login
+
+```bash
+curl -X POST https://your-api-url/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123"
+  }'
+```
+
+### Create Quiz
+
+```bash
+curl -X POST https://your-api-url/quiz \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "quizName": "Geography Quiz",
+    "description": "Test your geography knowledge"
+  }'
+```
+
+### Add Question
+
+```bash
+curl -X POST https://your-api-url/quiz/QUIZ_ID/question \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "question": "What is the capital of Sweden?",
+    "answer": "Stockholm",
+    "longitude": 18.0686,
+    "latitude": 59.3293
+  }'
+```
+
+### Register Score
+
+```bash
+curl -X POST https://your-api-url/quiz/QUIZ_ID/score \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "score": 85
+  }'
+```
+
+## Security Features
+
+- **JWT Authentication**: Secure token-based authentication
+- **Password Hashing**: bcrypt with salt rounds
+- **Authorization**: Users can only modify their own resources
+- **Input Validation**: Comprehensive validation for all inputs
+- **Coordinate Validation**: Geographic coordinates validation
+- **CORS**: Cross-origin resource sharing enabled
+
+## IAM Policy
+
+The application uses a comprehensive IAM policy that grants precise permissions:
+
+- DynamoDB operations (Query, Scan, GetItem, PutItem, UpdateItem, DeleteItem)
+- Access to all application tables and their indexes
+- No overly broad permissions
+
+## Error Handling
+
+All endpoints return standardized JSON responses:
+
+```json
+{
+  "success": boolean,
+  "message": "string",
+  "data": object | null,
+  "errors": object | null
+}
+```
+
+HTTP Status Codes:
+
+- 200: Success
+- 201: Created
+- 400: Bad Request
+- 401: Unauthorized
+- 403: Forbidden
+- 404: Not Found
+- 409: Conflict
+- 500: Internal Server Error
+
+## Environment Variables
+
+- `USERS_TABLE`: DynamoDB users table name
+- `QUIZZES_TABLE`: DynamoDB quizzes table name
+- `QUESTIONS_TABLE`: DynamoDB questions table name
+- `LEADERBOARD_TABLE`: DynamoDB leaderboard table name
+- `JWT_SECRET`: Secret key for JWT signing
+
+## Development Notes
+
+- All coordinates are validated to be within valid longitude (-180 to 180) and latitude (-90 to 90) ranges
+- Leaderboard entries are automatically sorted by score in descending order
+- Quiz deletion cascades to remove all related questions and leaderboard entries
+- User passwords are hashed with bcrypt using 10 salt rounds
+- JWT tokens expire after 24 hours
